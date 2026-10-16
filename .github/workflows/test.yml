@@ -28,3 +28,7 @@ jobs:
         run: node --check server.mjs
       - name: Run tests without API keys
         run: node --test test/server.test.mjs
+      - name: Check Windows launcher
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\test\launcher.test.ps1
