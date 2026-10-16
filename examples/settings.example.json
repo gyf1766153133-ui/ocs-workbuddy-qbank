@@ -1,0 +1,7 @@
+{
+  "baseUrl": "http://127.0.0.1:8317/v1",
+  "model": "deepseek-v4.1-flash",
+  "apiKey": "",
+  "timeoutSeconds": 90,
+  "cacheEnabled": true
+}

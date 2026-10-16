@@ -1,0 +1,13 @@
+{
+  "name": "ocs-workbuddy-qbank",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local OCS question-bank adapter for WorkBuddy Gateway",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/gyf1766153133-ui/ocs-workbuddy-qbank.git" },
+  "bugs": { "url": "https://github.com/gyf1766153133-ui/ocs-workbuddy-qbank/issues" },
+  "homepage": "https://github.com/gyf1766153133-ui/ocs-workbuddy-qbank#readme",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.mjs", "test": "node --test test/*.test.mjs" }
+}

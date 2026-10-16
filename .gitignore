@@ -1,0 +1,11 @@
+# Runtime settings contain your own API key. Never commit runtime data.
+/data/
+node_modules/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+workbuddy*.json
+.DS_Store
+Thumbs.db

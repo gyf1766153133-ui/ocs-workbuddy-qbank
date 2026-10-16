@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>本机题库 · WorkBuddy + DeepSeek</title>
+<style>
+  :root{font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#22334a;background:#f3f5f8;font-size:15px}*{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:40px auto;padding:0 22px 44px}header{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:28px}h1{font-size:27px;margin:0 0 9px}h2{font-size:19px;margin:0 0 20px}p{line-height:1.7;margin:10px 0}.subtle,.hint{color:#63738a}.hint{font-size:13px}.pill{background:#e5edf9;color:#2c5599;border-radius:20px;padding:8px 14px;white-space:nowrap}.layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{background:white;border:1px solid #e2e7ef;border-radius:15px;padding:25px;box-shadow:0 3px 12px #233a5a04}.wide{grid-column:1/-1}label{display:block;font-weight:600;margin:14px 0 7px}input,select,textarea{font:inherit;color:inherit;border:1px solid #ced6e2;border-radius:8px;padding:10px 11px;width:100%;background:#fff}input:focus,select:focus,textarea:focus{outline:2px solid #94b5ee;border-color:transparent}textarea{resize:vertical;line-height:1.55}#ocsConfig{font-family:Consolas,monospace;font-size:12px;background:#f7f9fc;min-height:230px}.check{display:flex;gap:8px;align-items:center;font-weight:400;font-size:14px}.check input{width:auto}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}button{font:inherit;cursor:pointer;border:1px solid #cfd8e6;background:white;color:#325685;border-radius:8px;padding:10px 15px}button.primary{background:#2f65bf;color:white;border-color:#2f65bf}button:hover{filter:brightness(.97)}button:disabled{opacity:.6;cursor:wait}.status{padding:11px 13px;border-radius:8px;background:#f0f4f9;line-height:1.6;margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere}.status.error{background:#fff0ee;color:#a23931}.status.ok{background:#edf7f0;color:#28613e}#testAnswer{font-size:20px;font-weight:600}#testExplanation{white-space:pre-wrap}#cacheRows{display:grid;gap:10px;margin-top:16px}.cache-row{border:1px solid #e1e7ef;border-radius:9px;padding:14px}.cache-row .title{white-space:pre-wrap;overflow-wrap:anywhere}.cache-row .answer{color:#275495;margin:9px 0;white-space:pre-wrap}.cache-row button{font-size:12px;padding:5px 10px}.cache-row small{display:block;color:#6b7d92}.steps{padding-left:22px;line-height:1.8}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px}.topline h2{margin:0}details{margin-top:10px}summary{cursor:pointer;color:#4d6690}pre{white-space:pre-wrap;word-break:break-word;font:13px/1.6 Consolas,monospace}a{color:#2f65bf}#result{display:none}#modelList{font-size:13px}@media(max-width:760px){main{margin-top:24px}.layout{grid-template-columns:1fr}header{display:block}.pill{display:inline-block;margin-top:10px}.card{padding:20px}h1{font-size:23px}}
+</style>
+<main>
+  <header><div><h1>本机题库</h1><div class="subtle">OCS → WorkBuddy Gateway → DeepSeek</div></div><span class="pill" id="serviceStatus">正在连接本机服务…</span></header>
+  <div class="layout">
+    <section class="card">
+      <h2>1. 连接你的网关</h2>
+      <form id="settingsForm">
+        <label for="baseUrl">网关地址</label><input id="baseUrl" type="url" required value="http://127.0.0.1:8317/v1">
+        <label for="model">模型 ID</label><input id="model" required value="deepseek-v4.1-flash" list="models"><datalist id="models"></datalist>
+        <label for="apiKey">网关的模型 API Key</label><input id="apiKey" type="password" autocomplete="off" placeholder="网关要求认证时填写">
+        <p class="hint" id="keyHint">密钥保存在此电脑的 data/settings.json，页面不会回显密钥。</p>
+        <label class="check"><input id="clearApiKey" type="checkbox">清除已保存的网关密钥</label>
+        <label for="timeoutSeconds">调用超时（秒）</label><input id="timeoutSeconds" type="number" min="10" max="150" value="90" required>
+        <label class="check"><input id="cacheEnabled" type="checkbox" checked>缓存已生成的答案，相同题干、选项和模型再次查询时复用</label>
+        <div class="actions"><button class="primary" type="submit">保存设置</button><button id="checkModels" type="button">检查网关 / 获取模型</button></div>
+      </form>
+      <div id="settingsMessage" class="status" role="status">本机网关默认使用 8317 端口。</div>
+      <div id="modelList" class="hint"></div>
+    </section>
+    <section class="card">
+      <h2>2. 验证一道题</h2>
+      <p class="hint">会调用你的 WorkBuddy 模型；命中缓存时直接读取本地答案。</p>
+      <form id="testForm">
+        <label for="questionType">题型</label><select id="questionType"><option value="single">单选题</option><option value="multiple">多选题</option><option value="judgement">判断题</option><option value="completion">填空题</option><option value="short">简答题</option><option value="unknown">自动识别</option></select>
+        <label for="title">题干</label><textarea id="title" rows="3" required>1 + 1 等于多少？</textarea>
+        <label for="options">选项（每行一个，按页面顺序）</label><textarea id="options" rows="4">A. 1
+B. 2
+C. 3
+D. 4</textarea>
+        <div class="actions"><button class="primary" id="testButton" type="submit">查询答案</button></div>
+      </form>
+      <div id="testMessage" class="status" role="status">支持文字单选、多选、判断、填空和简答题。</div>
+      <div id="result"><p id="testAnswer"></p><p id="testExplanation"></p><div class="hint" id="testSource"></div></div>
+    </section>
+    <section class="card wide">
+      <div class="topline"><h2>3. 接入 OCS</h2><button id="copyConfig" class="primary">复制题库配置</button></div>
+      <ol class="steps"><li>在 OCS 齿轮设置中打开「题库配置」，将下面的完整 JSON 粘贴到配置区，解析器选择「默认」，然后保存。</li><li>脚本管理器请求连接 <strong>127.0.0.1</strong> 时，允许本机题库连接。</li><li>在 OCS 高级设置中将「搜题最大耗时」设为 <strong>120 秒</strong>，搜题并发设为 <strong>1～2</strong>，先用一道练习题核对答案。</li></ol>
+      <p class="hint">服务运行时才能查询。OCS 的「连接成功」只说明本机接口可达；请先完成上面的模型查询。</p>
+      <label for="requestType">运行方式</label><select id="requestType"><option value="GM_xmlhttpRequest">浏览器油猴 / 脚本猫（推荐）</option><option value="fetch">OCS Desktop / fetch</option></select>
+      <label for="ocsConfig">完整题库配置</label><textarea id="ocsConfig" readonly spellcheck="false"></textarea>
+      <div id="copyMessage" class="hint" role="status"></div>
+    </section>
+    <section class="card wide">
+      <div class="topline"><h2>本地题库 <span class="hint" id="cacheCount"></span></h2><div class="actions" style="margin:0"><button id="refreshCache">刷新</button><button id="exportCache">导出题库 JSON</button></div></div>
+      <p class="hint">AI 生成的答案可能出错。核对解析后使用；若发现错答，可删除该条缓存，下次查询会重新生成。最多保留最近 1000 条。</p>
+      <div id="cacheRows"></div><div id="cacheMessage" role="status" class="hint"></div>
+    </section>
+  </div>
+  <p class="hint">数据保存在程序旁的 data 文件夹。网关的模型 API Key 与管理 Key 不同；此处填写用于调用模型的 Key。</p>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let savedConfig = [], rows = [];
+  async function api(path, body) {
+    const response = await fetch('/api/' + path, {method:body===undefined?'GET':'POST',headers:{'X-Local-UI':'1',...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    const value = await response.json();
+    if(!response.ok || value.code===0) throw new Error(value.message || '请求失败');
+    return value;
+  }
+  function message(id, text, kind='') { $(id).textContent=text; $(id).className='status '+kind; }
+  function renderConfig(){const configs=structuredClone(savedConfig);configs.forEach(x=>x.type=$('requestType').value);$('ocsConfig').value=JSON.stringify(configs,null,2);}
+  async function loadState(){
+    const state=await api('state');
+    ['baseUrl','model','timeoutSeconds'].forEach(k=>$(k).value=state.settings[k]);
+    $('cacheEnabled').checked=state.settings.cacheEnabled;
+    $('keyHint').textContent=state.settings.hasApiKey?'已保存网关密钥。输入框留空会保留原密钥。密钥不会回显。':'尚未保存网关密钥；网关关闭认证时可留空。';
+    savedConfig=state.ocsConfig;renderConfig();
+    $('serviceStatus').textContent='本机服务已启动';
+  }
+  $('settingsForm').addEventListener('submit',async e=>{
+    e.preventDefault();const button=e.submitter;button.disabled=true;
+    try{await api('settings',{baseUrl:$('baseUrl').value,model:$('model').value,apiKey:$('apiKey').value,clearApiKey:$('clearApiKey').checked,timeoutSeconds:Number($('timeoutSeconds').value),cacheEnabled:$('cacheEnabled').checked});$('apiKey').value='';$('clearApiKey').checked=false;await loadState();message('settingsMessage','设置已保存。点击「检查网关 / 获取模型」验证连接。','ok');}
+    catch(e){message('settingsMessage',e.message,'error');}finally{button.disabled=false;}
+  });
+  $('checkModels').addEventListener('click',async()=>{
+    $('checkModels').disabled=true;message('settingsMessage','正在读取已保存的网关配置并获取模型…');
+    try{const data=await api('models',{});$('models').replaceChildren(...data.models.map(id=>{const option=document.createElement('option');option.value=id;return option;}));$('modelList').textContent='DeepSeek 模型：'+(data.models.filter(x=>/deepseek/i.test(x)).join('、')||'列表中未发现 DeepSeek');message('settingsMessage',data.selectedAvailable?'网关连接成功，当前模型存在。':'网关连接成功，但未找到当前模型，请选择列表中的模型 ID 并保存。',data.selectedAvailable?'ok':'error');}
+    catch(e){message('settingsMessage',e.message,'error');}finally{$('checkModels').disabled=false;}
+  });
+  $('testForm').addEventListener('submit',async e=>{
+    e.preventDefault();$('testButton').disabled=true;$('result').style.display='none';message('testMessage','正在查询，请稍候…');
+    try{const data=await api('answer',{title:$('title').value,options:$('options').value,type:$('questionType').value});$('testAnswer').textContent='答案：'+data.answers.join(' / ');$('testExplanation').textContent=data.explanation;$('testSource').textContent=(data.cached?'来源：本地缓存':'来源：AI 生成')+' · 模型：'+data.model;$('result').style.display='block';message('testMessage','查询成功，请结合解析核对答案。','ok');await refreshCache();}
+    catch(e){message('testMessage',e.message,'error');}finally{$('testButton').disabled=false;}
+  });
+  $('questionType').addEventListener('change',()=>{if(!['single','multiple'].includes($('questionType').value))$('options').value='';});
+  $('requestType').addEventListener('change',renderConfig);
+  $('copyConfig').addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText($('ocsConfig').value);$('copyMessage').textContent='已复制。请粘贴到 OCS 题库配置区并保存。';}
+    catch{$('ocsConfig').focus();$('ocsConfig').select();$('copyMessage').textContent='请按 Ctrl+C 复制已选中的配置。';}
+  });
+  async function refreshCache(){
+    const data=await api('cache');rows=data.rows;$('cacheCount').textContent='共 '+rows.length+' 条';$('cacheRows').replaceChildren();
+    for(const row of rows.slice(0,30)){
+      const card=document.createElement('div');card.className='cache-row';
+      const title=document.createElement('div');title.className='title';title.textContent=row.question;
+      const answer=document.createElement('div');answer.className='answer';answer.textContent='答案：'+row.answers.join(' / ');
+      const small=document.createElement('small');small.textContent=row.model+' · '+new Date(row.createdAt).toLocaleString('zh-CN');
+      const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='查看选项和解析';const text=document.createElement('pre');text.textContent=(row.options||'（无选项）')+'\n\n'+row.explanation;details.append(summary,text);
+      const del=document.createElement('button');del.textContent='删除该条缓存';del.style.marginTop='10px';del.onclick=async()=>{try{await api('cache/delete',{id:row.id});await refreshCache();}catch(e){$('cacheMessage').textContent=e.message;}};
+      card.append(title,answer,small,details,del);$('cacheRows').append(card);
+    }
+    $('cacheMessage').textContent=rows.length>30?'显示最近 30 条，可导出全部题库。':rows.length?'':'查询成功后，答案会保存在这里。';
+  }
+  $('refreshCache').onclick=()=>refreshCache().catch(e=>$('cacheMessage').textContent=e.message);
+  $('exportCache').onclick=async()=>{try{await refreshCache();const url=URL.createObjectURL(new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='题库-'+new Date().toISOString().slice(0,10)+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){$('cacheMessage').textContent=e.message;}};
+  Promise.all([loadState(),refreshCache()]).catch(e=>{$('serviceStatus').textContent='服务连接失败';message('settingsMessage',e.message,'error');});
+</script>
+</html>
