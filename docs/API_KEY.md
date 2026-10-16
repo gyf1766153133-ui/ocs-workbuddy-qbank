@@ -46,6 +46,8 @@ Base URL: https://your-provider.example/v1
 
 接口需要支持 `stream: false` 的 Chat Completions，并能按提示返回 JSON。模型列表检查会访问 `/models`；如果服务商未提供该接口，可以直接用单题查询检查模型调用。
 
+处理图片或公式图题时，还需要模型与接口支持 `image_url` 内容块。可在设置页上传一张简单题目图片测试；模型列表中存在某个 ID 并不能证明它支持图片。参见 [图片题说明](IMAGE_QUESTIONS.md)。
+
 ## 方法二：手动编辑本地配置
 
 通常不需要手动编辑。需要时可以：

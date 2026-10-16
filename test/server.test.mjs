@@ -9,6 +9,8 @@ const single = { title: '1+1=?', type: 'single', options: 'A.1\nB.2\nC.3' };
 const ui = { 'X-Local-UI': '1', 'Content-Type': 'application/json' };
 const jsonAnswer = (kind, answers, extra = {}) => JSON.stringify({ kind, answers, explanation: '示例解析', uncertain: false, ...extra });
 const cleanup = dir => { assert.ok(resolve(dir).startsWith(resolve(tmpdir()) + sep)); rmSync(dir, { recursive: true, force: true }); };
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF3sAAAAASUVORK5CYII=';
+const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 test('choice formats enforce option bounds and preserve OCS letter fallback', () => {
   assert.equal(parseModelAnswer(jsonAnswer('single', ['b']), single).answer, 'B');
@@ -32,12 +34,31 @@ test('empty, uncertain, invalid JSON and malformed results never become answers'
   assert.equal(parseModelAnswer('```json\n' + jsonAnswer('single', ['B']) + '\n```', single).answer, 'B');
 });
 
-test('question validation declines images and missing choice options', () => {
+test('question validation declines missing images and missing choice options', () => {
   assert.throws(() => normalizeQuestion({ title: '${title}' }), /题干/);
   assert.throws(() => normalizeQuestion({ ...single, options: '' }), /缺少选项/);
   assert.throws(() => normalizeQuestion({ ...single, title: '看图 [图片1]' }), /图片/);
   assert.throws(() => normalizeQuestion({ ...single, images: ['data:image/png;base64,abc'] }), /图片/);
   assert.equal(normalizeQuestion({ title: '判断', type: '判断题' }).type, 'judgement');
+});
+
+test('OCS optimized titles and ordered images map to a single question', () => {
+  const q = normalizeQuestion({ ...single, title: 'https://course.invalid/formula.png', options: 'https://course.invalid/choice.gif\nB. 2', images: [PNG, GIF], suggestion_title: '计算 [图片1]', suggestion_options: 'A. [图片2]\nB. 2' });
+  assert.equal(q.title, '计算 [图片1]');
+  assert.equal(q.options, 'A. [图片2]\nB. 2');
+  assert.deepEqual(q.images, [PNG, GIF]);
+  assert.throws(() => normalizeQuestion({ ...single, title: '[图片2]', images: [PNG] }), /标记/);
+  assert.throws(() => normalizeQuestion({ ...single, title: '[图片0]', images: [PNG] }), /标记/);
+  assert.throws(() => normalizeQuestion({ ...single, images: 'not-an-array' }), /数组/);
+  assert.throws(() => normalizeQuestion({ ...single, images: Array(9).fill(PNG) }), /8 张/);
+});
+
+test('image validation fixes OCS MIME prefixes and enforces size and data checks', () => {
+  assert.equal(normalizeQuestion({ ...single, images: [GIF.replace('image/gif', 'image/png')] }).images[0], GIF);
+  assert.throws(() => normalizeQuestion({ ...single, images: ['https://private.invalid/image.png'] }), /data URL/);
+  assert.throws(() => normalizeQuestion({ ...single, images: ['data:image/png;base64,YWJjZA=='] }), /图片数据/);
+  const huge = 'data:image/png;base64,' + Buffer.alloc(4 * 1024 * 1024 + 1).toString('base64');
+  assert.throws(() => normalizeQuestion({ ...single, images: [huge] }), /4 MiB/);
 });
 
 test('settings preserve secret on blank input and accept completion URL', () => {
@@ -53,6 +74,9 @@ test('generated OCS handler returns a string answer and surfaces errors', () => 
   const [config] = makeOcsConfig('http://127.0.0.1:8765', 'local-token');
   assert.equal(config.type, 'GM_xmlhttpRequest');
   assert.equal(config.data.title, '${title}');
+  assert.deepEqual(Function(config.data.images.handler)()({ images: [PNG] }), [PNG]);
+  assert.deepEqual(Function(config.data.images.handler)()({}), []);
+  assert.equal(config.data.suggestion_title, '${suggestion_title}');
   const handler = Function(config.handler)();
   assert.deepEqual(handler({ code: 1, question: 'q', answer: 'AC', cached: true }).slice(0, 2), ['q', 'AC']);
   assert.throws(() => handler({ code: 0, message: '认证失败' }), /认证失败/);
@@ -118,4 +142,42 @@ test('gateway authentication errors and truncated output are not cached', async 
   await assert.rejects(app.answer(single), /截断/);
   const rows = await (await fetch(address + '/api/cache', { headers: ui })).json();
   assert.equal(rows.rows.length, 0);
+});
+
+test('HTTP image requests use vision blocks, include bytes in cache key, and avoid storing images', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'ocs-wb-image-'));
+  let calls = 0;
+  const app = createApp({ dataDir: dir, port: 0, fetchImpl: async (url, options) => {
+    calls++;
+    const content = JSON.parse(options.body).messages[1].content;
+    assert.equal(content[0].type, 'text');
+    assert.ok(content[0].text.includes('[图片1]'));
+    assert.equal(content[1].type, 'image_url');
+    assert.ok(content[1].image_url.url.startsWith('data:image/png;base64,'));
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: jsonAnswer('single', ['B']) } }] });
+  } });
+  const address = await app.listen();
+  t.after(async () => { await app.close(); cleanup(dir); });
+  const bytes = Buffer.from(PNG.split(',')[1], 'base64');
+  const largePng = 'data:image/png;base64,' + Buffer.concat([bytes, Buffer.alloc(120000)]).toString('base64');
+  const post = body => fetch(address + '/api/answer', { method: 'POST', headers: ui, body: JSON.stringify(body) }).then(r => r.json());
+  const q = { ...single, title: '计算 [图片1]', images: [largePng] };
+  const first = await post(q);
+  assert.equal(first.code, 1); assert.equal(first.imageCount, 1); assert.equal(first.answer, 'B');
+  assert.equal((await post(q)).cached, true);
+  assert.equal(calls, 1);
+  const changed = await post({ ...q, images: [PNG] });
+  assert.equal(calls, 2); assert.notEqual(changed.id, first.id);
+  const cache = readFileSync(join(dir, 'cache.json'), 'utf8');
+  assert.ok(!cache.includes('base64')); assert.ok(cache.length < 10000);
+});
+
+test('unsupported vision requests return a useful error and are not cached', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'ocs-wb-no-vision-'));
+  const app = createApp({ dataDir: dir, port: 0, fetchImpl: async () => new Response('not supported', { status: 400 }) });
+  const address = await app.listen();
+  t.after(async () => { await app.close(); cleanup(dir); });
+  await assert.rejects(app.answer({ ...single, title: '[图片1]', images: [PNG] }), /image_url/);
+  const cache = await (await fetch(address + '/api/cache', { headers: ui })).json();
+  assert.equal(cache.rows.length, 0);
 });

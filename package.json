@@ -1,6 +1,6 @@
 {
   "name": "ocs-workbuddy-qbank",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Local OCS question-bank adapter for WorkBuddy Gateway",
   "license": "MIT",

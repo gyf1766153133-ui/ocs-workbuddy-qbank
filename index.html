@@ -34,15 +34,17 @@
 B. 2
 C. 3
 D. 4</textarea>
+        <label for="images">题目图片（可选）</label><input id="images" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif">
+        <p class="hint">最多 8 张，单张不超过 4 MiB、总计不超过 8 MiB；按顺序对应 [图片1]、[图片2]。使用支持图片输入的模型。</p>
         <div class="actions"><button class="primary" id="testButton" type="submit">查询答案</button></div>
       </form>
-      <div id="testMessage" class="status" role="status">支持文字单选、多选、判断、填空和简答题。</div>
+      <div id="testMessage" class="status" role="status">支持文字题，也可上传图片或公式图进行识别。</div>
       <div id="result"><p id="testAnswer"></p><p id="testExplanation"></p><div class="hint" id="testSource"></div></div>
     </section>
     <section class="card wide">
       <div class="topline"><h2>3. 接入 OCS</h2><button id="copyConfig" class="primary">复制题库配置</button></div>
       <ol class="steps"><li>在 OCS 齿轮设置中打开「题库配置」，将下面的完整 JSON 粘贴到配置区，解析器选择「默认」，然后保存。</li><li>脚本管理器请求连接 <strong>127.0.0.1</strong> 时，允许本机题库连接。</li><li>在 OCS 高级设置中将「搜题最大耗时」设为 <strong>120 秒</strong>，搜题并发设为 <strong>1～2</strong>，先用一道练习题核对答案。</li></ol>
-      <p class="hint">服务运行时才能查询。OCS 的「连接成功」只说明本机接口可达；请先完成上面的模型查询。</p>
+      <p class="hint">服务运行时才能查询。OCS 的「连接成功」只说明本机接口可达；请先完成上面的模型查询。升级后需要重新复制配置，图片与公式图题请开启 OCS 图片题优化。</p>
       <label for="requestType">运行方式</label><select id="requestType"><option value="GM_xmlhttpRequest">浏览器油猴 / 脚本猫（推荐）</option><option value="fetch">OCS Desktop / fetch</option></select>
       <label for="ocsConfig">完整题库配置</label><textarea id="ocsConfig" readonly spellcheck="false"></textarea>
       <div id="copyMessage" class="hint" role="status"></div>
@@ -86,7 +88,7 @@ D. 4</textarea>
   });
   $('testForm').addEventListener('submit',async e=>{
     e.preventDefault();$('testButton').disabled=true;$('result').style.display='none';message('testMessage','正在查询，请稍候…');
-    try{const data=await api('answer',{title:$('title').value,options:$('options').value,type:$('questionType').value});$('testAnswer').textContent='答案：'+data.answers.join(' / ');$('testExplanation').textContent=data.explanation;$('testSource').textContent=(data.cached?'来源：本地缓存':'来源：AI 生成')+' · 模型：'+data.model;$('result').style.display='block';message('testMessage','查询成功，请结合解析核对答案。','ok');await refreshCache();}
+    try{const files=Array.from($('images').files);if(files.length>8||files.some(f=>f.size>4*1024*1024)||files.reduce((sum,f)=>sum+f.size,0)>8*1024*1024)throw new Error('最多 8 张图片，单张不超过 4 MiB、总计不超过 8 MiB');const images=await Promise.all(files.map(file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('无法读取图片'));reader.readAsDataURL(file);})));const data=await api('answer',{title:$('title').value,options:$('options').value,type:$('questionType').value,images});$('testAnswer').textContent='答案：'+data.answers.join(' / ');$('testExplanation').textContent=data.explanation;$('testSource').textContent=(data.cached?'来源：本地缓存':'来源：AI 生成')+' · 模型：'+data.model+(data.imageCount?' · 图片：'+data.imageCount+' 张':'');$('result').style.display='block';message('testMessage','查询成功，请结合解析核对答案。','ok');await refreshCache();}
     catch(e){message('testMessage',e.message,'error');}finally{$('testButton').disabled=false;}
   });
   $('questionType').addEventListener('change',()=>{if(!['single','multiple'].includes($('questionType').value))$('options').value='';});
